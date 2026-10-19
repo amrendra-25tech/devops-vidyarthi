@@ -19,26 +19,27 @@ pipeline {
             }
         }
 
-        stage('License Scanning') {
+        stage('License Scanning (Syft)') {
             steps {
-                echo 'Installing Trivy and running License Scan on salary-api...'
+                echo 'Running Anchore Syft License Scanner (Offline, Zero Rate-Limits)...'
                 sh '''
-                    # 1. Download official Trivy binary using Aqua Security installer script
-                    if [ ! -f ./trivy ]; then
-                        echo "Installing Trivy..."
-                        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b .
-                        chmod +x ./trivy
+                    # 1. Download Anchore Syft standalone binary if not present
+                    if [ ! -f ./syft ]; then
+                        echo "Installing latest Syft CLI..."
+                        curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b .
+                        chmod +x ./syft
                     fi
 
                     # Verify version
-                    ./trivy --version
+                    ./syft --version
 
-                    # 2. Print human-readable table of all licenses directly in Jenkins console
-                    echo "================ LICENSE SUMMARY TABLE ================"
-                    ./trivy fs --scanners license --format table salary-api
+                    # 2. Display package and dependency table in Jenkins Console
+                    echo "================ DEPENDENCY & COMPONENT SUMMARY ================"
+                    ./syft scan dir:salary-api -o table
 
-                    # 3. Generate detailed JSON report artifact for reviewers
-                    ./trivy fs --scanners license --format json --output "salary-api/${REPORT_NAME}" salary-api
+                    # 3. Generate detailed SPDX License & SBOM JSON Report
+                    echo "================ GENERATING LICENSE SBOM REPORT ================"
+                    ./syft scan dir:salary-api -o spdx-json > "salary-api/${REPORT_NAME}"
                 '''
             }
         }
@@ -46,15 +47,15 @@ pipeline {
 
     post {
         always {
-            // Save the report under Jenkins build artifacts
+            // Save the SPDX license report under Jenkins build artifacts
             archiveArtifacts artifacts: "salary-api/${env.REPORT_NAME}", allowEmptyArchive: true
-            echo "License scan report archived: salary-api/${env.REPORT_NAME}"
+            echo "Archived SPDX license report: salary-api/${env.REPORT_NAME}"
         }
         success {
-            echo "LICENSE SCAN PASSED: All dependency licenses scanned successfully!"
+            echo "LICENSE SCAN PASSED: Open-source licenses and dependencies cataloged successfully!"
         }
         failure {
-            echo "LICENSE SCAN FAILED: Error occurred during license scan."
+            echo "LICENSE SCAN FAILED: Error occurred during Syft scan."
         }
     }
 }
