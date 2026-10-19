@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
-        APP_REPO_URL  = 'https://github.com/OT-MICROSERVICES/salary-api.git'
-        APP_BRANCH    = 'main'
-        REPORT_NAME   = 'salary-api-license-report.json'
-        TRIVY_VERSION = '0.50.1'
+        APP_REPO_URL = 'https://github.com/OT-MICROSERVICES/salary-api.git'
+        APP_BRANCH   = 'main'
+        REPORT_NAME  = 'salary-api-license-report.json'
     }
 
     stages {
@@ -22,12 +21,12 @@ pipeline {
 
         stage('License Scanning') {
             steps {
-                echo 'Running Trivy Open-Source License Scan...'
-                sh """
-                    # 1. Download standalone Trivy binary if not already present (No Docker / No Root required)
+                echo 'Installing Trivy and running License Scan on salary-api...'
+                sh '''
+                    # 1. Download official Trivy binary using Aqua Security installer script
                     if [ ! -f ./trivy ]; then
-                        echo "Downloading Trivy v${TRIVY_VERSION}..."
-                        curl -sSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" | tar -xz trivy
+                        echo "Installing Trivy..."
+                        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b .
                         chmod +x ./trivy
                     fi
 
@@ -39,8 +38,8 @@ pipeline {
                     ./trivy fs --scanners license --format table salary-api
 
                     # 3. Generate detailed JSON report artifact for reviewers
-                    ./trivy fs --scanners license --format json --output "salary-api/${env.REPORT_NAME}" salary-api
-                """
+                    ./trivy fs --scanners license --format json --output "salary-api/${REPORT_NAME}" salary-api
+                '''
             }
         }
     }
