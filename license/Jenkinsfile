@@ -1,0 +1,61 @@
+pipeline {
+    agent any
+
+    environment {
+        APP_REPO_URL  = 'https://github.com/OT-MICROSERVICES/salary-api.git'
+        APP_BRANCH    = 'main'
+        REPORT_NAME   = 'salary-api-license-report.json'
+        TRIVY_VERSION = '0.50.1'
+    }
+
+    stages {
+        stage('Checkout Target Code') {
+            steps {
+                echo "Cloning salary-api repository from ${env.APP_REPO_URL}..."
+                
+                dir('salary-api') {
+                    git branch: env.APP_BRANCH,
+                        url: env.APP_REPO_URL
+                }
+            }
+        }
+
+        stage('License Scanning') {
+            steps {
+                echo 'Running Trivy Open-Source License Scan...'
+                sh """
+                    # 1. Download standalone Trivy binary if not already present (No Docker / No Root required)
+                    if [ ! -f ./trivy ]; then
+                        echo "Downloading Trivy v${TRIVY_VERSION}..."
+                        curl -sSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" | tar -xz trivy
+                        chmod +x ./trivy
+                    fi
+
+                    # Verify version
+                    ./trivy --version
+
+                    # 2. Print human-readable table of all licenses directly in Jenkins console
+                    echo "================ LICENSE SUMMARY TABLE ================"
+                    ./trivy fs --scanners license --format table salary-api
+
+                    # 3. Generate detailed JSON report artifact for reviewers
+                    ./trivy fs --scanners license --format json --output "salary-api/${env.REPORT_NAME}" salary-api
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            // Save the report under Jenkins build artifacts
+            archiveArtifacts artifacts: "salary-api/${env.REPORT_NAME}", allowEmptyArchive: true
+            echo "License scan report archived: salary-api/${env.REPORT_NAME}"
+        }
+        success {
+            echo "LICENSE SCAN PASSED: All dependency licenses scanned successfully!"
+        }
+        failure {
+            echo "LICENSE SCAN FAILED: Error occurred during license scan."
+        }
+    }
+}
